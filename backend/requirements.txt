@@ -1,0 +1,13 @@
+# API and hosted-model integration
+fastapi
+uvicorn[standard]
+google-genai
+pydantic-settings
+python-dotenv
+
+# Read-only SQL policy validation
+sqlglot
+
+# API and workflow tests
+httpx
+pytest

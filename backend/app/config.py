@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -16,6 +16,16 @@ class Settings(BaseSettings):
 
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.6-flash"
+    analytics_db_path: Path = BACKEND_DIR / "data" / "analytics.sqlite3"
+    run_metadata_db_path: Path = BACKEND_DIR / "data" / "run-metadata.sqlite3"
+
+    @model_validator(mode="after")
+    def resolve_database_paths(self) -> "Settings":
+        if not self.analytics_db_path.is_absolute():
+            self.analytics_db_path = BACKEND_DIR / self.analytics_db_path
+        if not self.run_metadata_db_path.is_absolute():
+            self.run_metadata_db_path = BACKEND_DIR / self.run_metadata_db_path
+        return self
 
     @property
     def gemini_configured(self) -> bool:

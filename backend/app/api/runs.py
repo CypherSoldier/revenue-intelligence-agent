@@ -3,8 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 
 from app.config import get_settings
-from app.database.run_store import create_run, get_run
 from app.schemas.runs import RunCreateRequest, RunResponse
+from app.services.run_service import create_run, get_run
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])

@@ -2,8 +2,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.config import get_settings
 from app.schemas.runs import RunCreateRequest, RunResponse
+from app.providers.errors import ProviderConfigurationError
+from app.providers.factory import validate_provider_configuration
 from app.services.run_service import create_run, get_run
 
 
@@ -12,17 +13,16 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_202_ACCEPTED)
 def submit_run(request: RunCreateRequest) -> RunResponse:
-    if not get_settings().gemini_configured:
+    try:
+        validate_provider_configuration(require_credentials=True)
+    except ProviderConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "code": "model_not_configured",
-                "message": (
-                    "Set GEMINI_API_KEY in backend/.env before submitting an "
-                    "investigation. The API can still be used for health checks."
-                ),
+                "code": error.code,
+                "message": error.message,
             },
-        )
+        ) from error
     return create_run(request.question)
 
 

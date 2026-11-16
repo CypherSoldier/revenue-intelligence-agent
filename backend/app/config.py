@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-3.6-flash"
+    llm_provider: str = Field(default="gemini", min_length=1, max_length=50)
+    gemini_model: str = Field(default="gemini-3.6-flash", min_length=1, max_length=100)
     analytics_db_path: Path = BACKEND_DIR / "data" / "analytics.sqlite3"
     run_metadata_db_path: Path = BACKEND_DIR / "data" / "run-metadata.sqlite3"
     query_timeout_seconds: float = Field(default=5.0, gt=0, le=60)

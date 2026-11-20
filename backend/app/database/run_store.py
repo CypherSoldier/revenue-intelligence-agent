@@ -16,6 +16,7 @@ _ADDITIVE_COLUMNS = {
     "evidence_references_json": "TEXT NOT NULL DEFAULT '[]'",
     "report_json": "TEXT",
     "failure_json": "TEXT",
+    "clarification": "TEXT",
 }
 
 
@@ -45,7 +46,8 @@ def initialize_run_store() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 error_code TEXT,
-                error_message TEXT
+                error_message TEXT,
+                clarification TEXT
             )
             """
         )
@@ -94,7 +96,7 @@ def save_run(run: RunResponse) -> RunResponse | None:
             UPDATE analysis_runs
             SET status = ?, updated_at = ?, plan_summary = ?, steps_json = ?,
                 query_references_json = ?, evidence_references_json = ?,
-                report_json = ?, failure_json = ?, error_code = ?, error_message = ?
+                report_json = ?, failure_json = ?, clarification = ?, error_code = ?, error_message = ?
             WHERE id = ?
             """,
             (
@@ -106,6 +108,7 @@ def save_run(run: RunResponse) -> RunResponse | None:
                 _json_for_models(run.evidence_references),
                 run.report.model_dump_json() if run.report else None,
                 run.failure.model_dump_json() if run.failure else None,
+                run.clarification,
                 run.error_code,
                 run.error_message,
                 str(run.id),
@@ -127,7 +130,7 @@ def get_run(run_id: UUID) -> RunResponse | None:
             SELECT id, question, status, created_at, updated_at,
                    error_code, error_message, plan_summary, steps_json,
                    query_references_json, evidence_references_json,
-                   report_json, failure_json
+                   report_json, failure_json, clarification
             FROM analysis_runs
             WHERE id = ?
             """,
@@ -151,6 +154,7 @@ def get_run(run_id: UUID) -> RunResponse | None:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         plan_summary=row["plan_summary"],
+        clarification=row["clarification"],
         steps=_load_models(row["steps_json"]),
         query_references=_load_models(row["query_references_json"]),
         evidence_references=_load_models(row["evidence_references_json"]),

@@ -98,6 +98,7 @@ class FailureDetails(BaseModel):
 
 class RunUpdate(BaseModel):
     status: RunStatus | None = None
+    clarification: Annotated[str, Field(min_length=1, max_length=2000)] | None = None
     plan_summary: Annotated[str, Field(max_length=4000)] | None = None
     steps: list[PlanStepSummary] | None = Field(default=None, max_length=12)
     query_references: list[QueryReference] | None = Field(default=None, max_length=50)
@@ -126,6 +127,7 @@ class RunResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     plan_summary: str | None = None
+    clarification: Annotated[str, Field(min_length=1, max_length=2000)] | None = None
     steps: list[PlanStepSummary] = Field(default_factory=list, max_length=12)
     query_references: list[QueryReference] = Field(default_factory=list, max_length=50)
     evidence_references: list[EvidenceReference] = Field(

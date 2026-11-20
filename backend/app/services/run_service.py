@@ -90,6 +90,29 @@ def update_run(run_id: UUID, update: RunUpdate) -> RunResponse:
             raise InvalidRunTransitionError(
                 "A completed run must have all plan steps completed."
             )
+        if not payload.get("query_references"):
+            raise InvalidRunTransitionError("A completed run must include an executed query.")
+        if payload.get("clarification") is not None:
+            raise InvalidRunTransitionError("A completed run cannot include a clarification.")
+        if any(
+            (query.get("status") if isinstance(query, dict) else query.status)
+            != "completed"
+            for query in payload.get("query_references", [])
+        ):
+            raise InvalidRunTransitionError("A completed run cannot include a rejected or failed query.")
+    if status == RunStatus.NEEDS_INPUT:
+        if not payload.get("clarification"):
+            raise InvalidRunTransitionError("A run needing input must include a clarification.")
+        if payload.get("report") is not None:
+            raise InvalidRunTransitionError("A clarification cannot be stored as a successful report.")
+        if payload.get("query_references") or payload.get("evidence_references"):
+            raise InvalidRunTransitionError("A run needing input cannot include executed query evidence.")
+        if payload.get("steps"):
+            raise InvalidRunTransitionError("A run needing input cannot include an executable plan.")
+    elif payload.get("clarification") is not None:
+        raise InvalidRunTransitionError("Clarifications can only be stored on runs needing input.")
+    if status == RunStatus.FAILED and payload.get("report") is not None:
+        raise InvalidRunTransitionError("A failed run cannot include a successful report.")
     if status == RunStatus.FAILED and failure is None:
         raise InvalidRunTransitionError("A failed run must include failure details.")
     if status != RunStatus.FAILED and failure is not None:

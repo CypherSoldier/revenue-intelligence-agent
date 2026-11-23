@@ -73,6 +73,7 @@ export interface InvestigationRun {
   created_at: string
   updated_at: string
   plan_summary: string | null
+  clarification: string | null
   steps: PlanStep[]
   query_references: QueryReference[]
   evidence_references: EvidenceReference[]

@@ -30,6 +30,13 @@ type HealthState =
   | { phase: 'online'; data: ApiHealth }
   | { phase: 'offline'; message: string }
 
+const RUN_HISTORY_KEY = 'revenue-investigation-run-history-v1'
+const TERMINAL_RUN_STATUSES: InvestigationRun['status'][] = [
+  'completed',
+  'needs_input',
+  'failed',
+]
+
 function statusLabel(status: string) {
   return status.replaceAll('_', ' ')
 }
@@ -55,8 +62,12 @@ function InvestigationSteps({ run }: { run: InvestigationRun | null }) {
     return (
       <p className="empty-state compact">
         {run.status === 'queued'
-          ? 'This run is saved and queued. The investigation workflow will add steps in a later delivery.'
-          : 'No plan steps have been recorded for this run.'}
+          ? 'This run is saved and waiting to start.'
+          : run.status === 'needs_input'
+            ? 'The question needs clarification before analysis can begin.'
+            : run.status === 'failed'
+              ? 'The run stopped before a complete plan was saved.'
+              : 'The plan is being prepared.'}
       </p>
     )
   }
@@ -87,7 +98,7 @@ function QueryReferences({ run }: { run: InvestigationRun | null }) {
   if (!run || run.query_references.length === 0) {
     return (
       <p className="empty-state query-empty">
-        SQL activity will appear here when the investigation workflow is connected.
+        SQL and result references will appear here when a query has run.
       </p>
     )
   }
@@ -100,6 +111,9 @@ function QueryReferences({ run }: { run: InvestigationRun | null }) {
             <span>{query.status.replace('_', ' ')} query</span>
             <span>{query.row_count === null ? 'Rows not recorded' : `${query.row_count} rows`}</span>
           </summary>
+          <div className="query-reference-meta">
+            Step {query.step_id} · {query.executed_at ? `Executed ${new Date(query.executed_at).toLocaleString()}` : 'Not executed'} · Ref {query.id.slice(0, 8)}
+          </div>
           <code>{query.sql}</code>
         </details>
       ))}
@@ -110,13 +124,13 @@ function QueryReferences({ run }: { run: InvestigationRun | null }) {
 function EvidenceCard({ evidence }: { evidence: EvidenceReference }) {
   const entries = Object.entries(evidence.values)
   return (
-    <article className="evidence-card">
+    <article className="evidence-card" id={`evidence-${evidence.id}`}>
       <div className="evidence-heading">
         <strong>{evidence.label}</strong>
         <span>{evidence.period}</span>
       </div>
       <p>{evidence.summary}</p>
-      <div className="evidence-meta">Metric: {evidence.metric}</div>
+      <div className="evidence-meta">Metric: {evidence.metric} · Query ref {evidence.query_id.slice(0, 8)}</div>
       {entries.length > 0 && (
         <dl className="evidence-values">
           {entries.map(([name, value]) => (
@@ -138,10 +152,19 @@ function ReportPanel({ run }: { run: InvestigationRun | null }) {
         <div className="empty-report-icon"><FileText size={18} /></div>
         <h3>{run ? `Run ${statusLabel(run.status)}` : 'No report yet'}</h3>
         <p>
-          {run
-            ? 'The run record is saved. Evidence and findings will appear when the investigation workflow is implemented.'
-            : 'Submit a question to create a saved run. Evidence and findings will appear here when the investigation workflow is implemented.'}
+          {!run
+            ? 'Submit a question to create a saved investigation.'
+            : run.status === 'needs_input'
+              ? 'Please clarify the question, then start a new investigation.'
+              : run.status === 'failed'
+                ? 'This run did not produce a complete report.'
+                : 'The investigation is running. Its report will appear here when ready.'}
         </p>
+        {run?.clarification && (
+          <div className="clarification-message" role="status">
+            <CircleAlert size={15} /><span>{run.clarification}</span>
+          </div>
+        )}
         {run?.failure && (
           <div className="run-failure" role="alert">
             <AlertCircle size={15} />
@@ -171,9 +194,14 @@ function ReportPanel({ run }: { run: InvestigationRun | null }) {
               <div>
                 <p>{finding.text}</p>
                 {finding.evidence_ids.length > 0 && (
-                  <span className="finding-evidence-count">
-                    Supported by {finding.evidence_ids.length} evidence {finding.evidence_ids.length === 1 ? 'item' : 'items'}
-                  </span>
+                  <div className="finding-evidence-links">
+                    <span className="finding-evidence-count">
+                      Supported by {finding.evidence_ids.length} evidence {finding.evidence_ids.length === 1 ? 'item' : 'items'}:
+                    </span>
+                    {finding.evidence_ids.map((id, evidenceIndex) => (
+                      <a href={`#evidence-${id}`} key={id}>Evidence {evidenceIndex + 1}</a>
+                    ))}
+                  </div>
                 )}
               </div>
             </article>
@@ -197,6 +225,13 @@ function ReportPanel({ run }: { run: InvestigationRun | null }) {
         </div>
       )}
 
+      {run.failure && (
+        <div className="run-failure" role="alert">
+          <AlertCircle size={15} />
+          <span><strong>{run.failure.code}:</strong> {run.failure.message}</span>
+        </div>
+      )}
+
       {run.report.findings.some((finding) => finding.evidence_ids.some((id) => !evidenceById.has(id))) && (
         <div className="run-failure" role="status">
           <AlertCircle size={15} />
@@ -211,6 +246,8 @@ export function RevenueInvestigation() {
   const [question, setQuestion] = useState('')
   const [health, setHealth] = useState<HealthState>({ phase: 'checking' })
   const [run, setRun] = useState<InvestigationRun | null>(null)
+  const [history, setHistory] = useState<InvestigationRun[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isReloading, setIsReloading] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -224,6 +261,63 @@ export function RevenueInvestigation() {
     })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const savedIds = readSavedRunIds()
+    Promise.all(savedIds.map((id) => getRun(id).catch(() => null))).then((savedRuns) => {
+      if (!active) return
+      const availableRuns = savedRuns.filter((saved): saved is InvestigationRun => saved !== null)
+      setHistory(availableRuns)
+      setRun((current) => current ?? availableRuns[0] ?? null)
+      if (availableRuns.length > 0) setQuestion((current) => current || availableRuns[0].question)
+      setHistoryLoaded(savedRuns.every((saved) => saved !== null))
+      if (savedRuns.some((saved) => saved === null)) {
+        setReloadMessage('Some locally saved runs could not be reached. Their history IDs were kept in this browser.')
+      }
+    })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!historyLoaded) return
+    try {
+      window.localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(history.map((item) => item.id).slice(0, 10)))
+    } catch {
+      setReloadMessage('Run history could not be saved in this browser.')
+    }
+  }, [history, historyLoaded])
+
+  useEffect(() => {
+    if (!run || TERMINAL_RUN_STATUSES.includes(run.status)) return
+    let active = true
+    let refreshing = false
+    const timer = window.setInterval(async () => {
+      if (refreshing) return
+      refreshing = true
+      try {
+        const latest = await getRun(run.id)
+        if (active) {
+          setRun((current) => current?.id === latest.id ? latest : current)
+          setHistory((current) => mergeRunHistory(current, latest))
+        }
+      } catch (error) {
+        if (active) {
+          setReloadMessage(
+            error instanceof RevenueApiError
+              ? error.message
+              : 'The run status could not be refreshed. Retrying…'
+          )
+        }
+      } finally {
+        refreshing = false
+      }
+    }, 1500)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [run?.id, run?.status])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -246,12 +340,7 @@ export function RevenueInvestigation() {
     try {
       const created = await createRun(trimmedQuestion)
       setRun(created)
-      setQuestion(created.question)
-      try {
-        setRun(await getRun(created.id))
-      } catch {
-        setReloadMessage('The run was created, but its saved record could not be reloaded yet.')
-      }
+      setHistory((current) => mergeRunHistory(current, created))
     } catch (error) {
       setRequestError(
         error instanceof RevenueApiError
@@ -268,7 +357,9 @@ export function RevenueInvestigation() {
     setIsReloading(true)
     setReloadMessage(null)
     try {
-      setRun(await getRun(run.id))
+      const latest = await getRun(run.id)
+      setRun(latest)
+      setHistory((current) => mergeRunHistory(current, latest))
     } catch (error) {
       setReloadMessage(
         error instanceof RevenueApiError
@@ -278,6 +369,36 @@ export function RevenueInvestigation() {
     } finally {
       setIsReloading(false)
     }
+  }
+
+  async function selectHistoryRun(runId: string) {
+    setIsReloading(true)
+    setReloadMessage(null)
+    try {
+      const selected = await getRun(runId)
+      setRun(selected)
+      setQuestion(selected.question)
+      setHistory((current) => mergeRunHistory(current, selected))
+      setValidationError(null)
+      setRequestError(null)
+    } catch (error) {
+      setReloadMessage(
+        error instanceof RevenueApiError
+          ? error.message
+          : 'That saved run could not be reloaded.'
+      )
+      setHistory((current) => current.filter((item) => item.id !== runId))
+    } finally {
+      setIsReloading(false)
+    }
+  }
+
+  function startNewInvestigation() {
+    setRun(null)
+    setQuestion('')
+    setValidationError(null)
+    setRequestError(null)
+    setReloadMessage(null)
   }
 
   const healthLabel = health.phase === 'checking'
@@ -313,15 +434,43 @@ export function RevenueInvestigation() {
             <h1>Revenue Investigation</h1>
             <p className="lede">Ask a question about the demo revenue data and review the run status.</p>
           </div>
-          <button className="share-button" type="button" disabled title="Export will be added later">
-            <FileText size={15} /> Export brief
-          </button>
+          <div className="workspace-actions">
+            {run && <button className="new-investigation-button" type="button" onClick={startNewInvestigation}>New investigation</button>}
+            <button className="share-button" type="button" disabled title="Export will be added later">
+              <FileText size={15} /> Export brief
+            </button>
+          </div>
         </div>
 
         {health.phase === 'offline' && (
           <div className="api-health-error" role="alert">
             <AlertCircle size={16} /><span>{health.message}</span>
           </div>
+        )}
+
+        {history.length > 0 && (
+          <section className="history-section" aria-label="Recent saved investigations">
+            <div className="history-heading">
+              <div><strong>Recent investigations</strong><span>Saved in this browser</span></div>
+              <span>{history.length} of 10</span>
+            </div>
+            <div className="history-list">
+              {history.map((item) => (
+                <button
+                  className={`history-item${run?.id === item.id ? ' selected' : ''}`}
+                  type="button"
+                  key={item.id}
+                  onClick={() => selectHistoryRun(item.id)}
+                  disabled={isReloading}
+                  aria-current={run?.id === item.id ? 'true' : undefined}
+                >
+                  <span className={`history-status history-status-${item.status.replace('_', '-')}`} />
+                  <span className="history-copy"><strong>{item.question}</strong><small>{statusLabel(item.status)} · {new Date(item.updated_at).toLocaleString()}</small></span>
+                  <span className="history-open">Open</span>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         <section className="question-section" aria-labelledby="question-title">
@@ -400,6 +549,7 @@ export function RevenueInvestigation() {
               {run && <span className={`complete-pill run-status-${run.status.replace('_', '-')}`}>{statusLabel(run.status)}</span>}
             </div>
             <div className="panel investigation-panel">
+              {run?.plan_summary && <div className="run-plan"><strong>Plan</strong><span>{run.plan_summary}</span></div>}
               <div className="panel-top">
                 <span className="panel-caption"><Play size={12} fill="currentColor" /> Investigation path</span>
                 <span className="duration">{run ? `Updated ${new Date(run.updated_at).toLocaleTimeString()}` : 'Waiting for a question'}</span>
@@ -426,6 +576,21 @@ export function RevenueInvestigation() {
       </div>
     </main>
   )
+}
+
+function readSavedRunIds(): string[] {
+  try {
+    const stored = window.localStorage.getItem(RUN_HISTORY_KEY)
+    const parsed: unknown = stored ? JSON.parse(stored) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === 'string').slice(0, 10)
+  } catch {
+    return []
+  }
+}
+
+function mergeRunHistory(current: InvestigationRun[], latest: InvestigationRun): InvestigationRun[] {
+  return [latest, ...current.filter((item) => item.id !== latest.id)].slice(0, 10)
 }
 
 async function fetchHealth(): Promise<HealthState> {

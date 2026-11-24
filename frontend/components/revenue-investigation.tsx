@@ -7,7 +7,6 @@ import {
   Clock3,
   Database,
   FileText,
-  MoreHorizontal,
   Play,
   Search,
   Sparkles,
@@ -422,8 +421,7 @@ export function RevenueInvestigation() {
           <span className={`saved health-${health.phase}`} role="status" aria-live="polite">
             <span className="saved-dot" />{healthLabel}
           </span>
-          <button className="icon-button" aria-label="More options" type="button"><MoreHorizontal size={18} /></button>
-          <div className="avatar" aria-label="Analyst profile">AW</div>
+          <span className="avatar" aria-hidden="true">AW</span>
         </div>
       </header>
 
@@ -436,9 +434,6 @@ export function RevenueInvestigation() {
           </div>
           <div className="workspace-actions">
             {run && <button className="new-investigation-button" type="button" onClick={startNewInvestigation}>New investigation</button>}
-            <button className="share-button" type="button" disabled title="Export will be added later">
-              <FileText size={15} /> Export brief
-            </button>
           </div>
         </div>
 
@@ -560,6 +555,9 @@ export function RevenueInvestigation() {
                   <span><Database size={13} /> Query references</span>
                   <span className="query-state">{run?.query_references.length ?? 0} recorded</span>
                 </div>
+                {run?.query_references.length ? (
+                  <p className="query-help">SQL is read-only. A <code>?</code> marks a safely bound filter value; returned values are shown in the evidence cards.</p>
+                ) : null}
                 <QueryReferences run={run} />
               </div>
             </div>

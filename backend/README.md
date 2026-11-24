@@ -1,40 +1,39 @@
 # Backend
 
-## Local setup
+The FastAPI backend validates and runs bounded investigations against the synthetic SQLite analytics dataset. For the complete clean setup and two-terminal walkthrough, see the [repository README](../README.md).
 
-From the repository root, install the backend dependencies and create a local environment file:
+## Setup and run
+
+From the repository root:
 
 ```powershell
 uv sync --project backend
 Copy-Item backend\.env.example backend\.env
 ```
 
-Set `GEMINI_API_KEY` in `backend\.env`. The default model is `gemini-3.6-flash`; override it with `GEMINI_MODEL` if needed. The API key is read only by the backend and is excluded from Git.
-
-## Seed the analytics data
-
-From the repository root, create or reset the deterministic January–June 2025 synthetic revenue dataset:
+Set `GEMINI_API_KEY` in `backend\.env`, seed the demo data, and start the API:
 
 ```powershell
 uv run --project backend --directory backend python -m app.data.seed
-```
-
-This writes 18 rows to `backend/data/analytics.sqlite3`. The seed is repeatable and resets that demo analytics table to the documented facts. Run metadata is stored separately in `backend/data/run-metadata.sqlite3`. Both paths can be overridden with `ANALYTICS_DB_PATH` and `RUN_METADATA_DB_PATH`; relative paths are resolved from `backend/`.
-
-The catalog contract is available at `GET /catalog`. It describes the single `monthly_sales` table and the net revenue definition.
-
-Start the API from the repository root:
-
-```powershell
 uv run --project backend uvicorn app.main:app --app-dir backend --reload
 ```
 
-The health endpoint is available at `http://127.0.0.1:8000/health`. It reports whether a non-empty model key is configured but never returns the key. `POST /runs` accepts `{ "question": "..." }` and returns a persisted queued run when the Gemini key is configured; `GET /runs/{id}` reloads it. The run endpoints validate nonblank questions up to 2,000 characters and return a structured `503 model_not_configured` error when the key is absent. The agent workflow is added in a later delivery step, so a queued record is not yet an executed investigation.
+The API listens at `http://127.0.0.1:8000`. `GET /health` reports provider readiness without revealing credentials; `GET /catalog` describes the approved metric and table; `POST /runs` starts an investigation; `GET /runs/{id}` reloads it.
 
-Run backend tests:
+## Settings
+
+Settings are read from `backend/.env`. See [`.env.example`](.env.example) for all available options. The analytics and metadata databases are separate. Relative database paths are resolved from `backend/`. The query timeout defaults to 5 seconds (greater than 0 through 60); the result cap defaults to 100 rows (1 through 1,000).
+
+The seed command is repeatable and replaces the `monthly_sales` table with 18 documented synthetic rows. It does not clear saved run metadata. Never commit `.env` files or SQLite databases.
+
+## Safety and failure behavior
+
+The analytics query path accepts a single approved `SELECT`, uses bound filter parameters, opens SQLite in read-only mode, and independently enforces read-only behavior with SQLite settings and an authorizer. Time, row, result-shape, plan-step, tool-call, and retry limits are enforced in application code. Provider errors, invalid tool calls, rejected SQL, missing data, and exhausted retries remain explicit failed or clarification states; they must not be presented as successful reports.
+
+## Tests
+
+From the repository root:
 
 ```powershell
 uv run --project backend --directory backend pytest
 ```
-
-The current API is a foundation only; investigation and data endpoints are added in subsequent MVP steps.

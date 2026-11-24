@@ -1,16 +1,25 @@
 # Frontend
 
-This Next.js app is the runnable implementation of the `revenue-investigation-ui-concept` reference. The concept folder remains in the repository as a design source.
+This Next.js app is the local investigation workspace. It submits questions to the FastAPI backend and displays the plan, query references, validated evidence, report, caveats, and saved-run history.
+
+See the [repository README](../README.md) for clean setup, seeding, troubleshooting, limitations, and the demo script.
 
 ## Run locally
 
-From this directory:
+From the repository root, start the backend first. Then configure and start the frontend:
 
 ```powershell
-pnpm install
-pnpm dev
+Copy-Item frontend\.env.example frontend\.env.local
+pnpm --dir frontend install
+pnpm --dir frontend dev
 ```
 
-Then open http://localhost:3000. Use `pnpm build` to create a production build.
+Open `http://localhost:3000`. Set `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local` if the backend is not at `http://127.0.0.1:8000`. The model key belongs only in `backend/.env`.
 
-The current screen is a visual frontend preview. The displayed investigation and revenue values are illustrative sample content; the API, seeded dataset, and run lifecycle have not been connected yet. No model key is needed in the browser.
+## Build
+
+```powershell
+pnpm --dir frontend build
+```
+
+Run history IDs are saved in this browser's local storage; run contents are reloaded from the backend metadata store.

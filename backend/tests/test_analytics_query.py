@@ -33,6 +33,43 @@ def test_allowed_select_returns_seeded_evidence(analytics_db):
     assert result.row_count == 1
 
 
+def test_seeded_golden_facts_cover_all_documented_periods_and_regions(analytics_db):
+    repository = AnalyticsRepository(analytics_db)
+    result = repository.execute_query(
+        """
+        SELECT month_start, region, SUM(net_revenue_usd) AS total_usd
+        FROM monthly_sales
+        GROUP BY month_start, region
+        ORDER BY month_start, region
+        """
+    )
+    monthly = {}
+    quarterly = {"Q1": {}, "Q2": {}}
+    for month, region, value in result.rows:
+        monthly.setdefault(month[:7], 0)
+        monthly[month[:7]] += value
+        quarter = "Q1" if month < "2025-04" else "Q2"
+        quarterly[quarter][region] = quarterly[quarter].get(region, 0) + value
+
+    q1_total = sum(quarterly["Q1"].values())
+    q2_total = sum(quarterly["Q2"].values())
+    assert monthly == {
+        "2025-01": 390_000,
+        "2025-02": 400_000,
+        "2025-03": 410_000,
+        "2025-04": 330_000,
+        "2025-05": 335_000,
+        "2025-06": 335_000,
+    }
+    assert quarterly == {
+        "Q1": {"North": 400_000, "South": 450_000, "West": 350_000},
+        "Q2": {"North": 360_000, "South": 400_000, "West": 240_000},
+    }
+    assert (q1_total, q2_total, q2_total - q1_total) == (1_200_000, 1_000_000, -200_000)
+    assert round((q2_total - q1_total) / q1_total * 100, 1) == -16.7
+    assert round((quarterly["Q2"]["West"] - quarterly["Q1"]["West"]) / quarterly["Q1"]["West"] * 100, 1) == -31.4
+
+
 def test_allowed_cte_and_region_breakdown(analytics_db):
     repository = AnalyticsRepository(analytics_db)
 
@@ -136,6 +173,25 @@ def test_result_without_explicit_limit_is_bounded_and_rejected_when_too_large(
         repository.execute_query("SELECT * FROM monthly_sales")
 
     assert error.value.code == "result_row_limit_exceeded"
+
+
+def test_empty_result_is_returned_as_empty_not_as_a_failure(analytics_db):
+    result = AnalyticsRepository(analytics_db).execute_query(
+        "SELECT region FROM monthly_sales WHERE month_start >= ?", ("2030-01-01",)
+    )
+
+    assert result.columns == ["region"]
+    assert result.rows == []
+    assert result.row_count == 0
+
+
+def test_missing_database_returns_structured_database_error(tmp_path):
+    repository = AnalyticsRepository(tmp_path / "missing.sqlite3")
+
+    with pytest.raises(AnalyticsQueryError) as error:
+        repository.execute_query("SELECT SUM(net_revenue_usd) FROM monthly_sales")
+
+    assert error.value.code == "analytics_database_unavailable"
 
 
 def test_rejects_non_integer_or_negative_limits():

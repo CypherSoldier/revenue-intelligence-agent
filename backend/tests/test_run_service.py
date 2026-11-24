@@ -39,8 +39,9 @@ def database_paths(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-def test_api_creates_and_reloads_run_after_app_restart(database_paths):
+def test_api_creates_and_reloads_run_after_app_restart(database_paths, monkeypatch):
     _, metadata_path = database_paths
+    monkeypatch.setattr("app.api.runs.process_run", lambda _run_id: None)
     with TestClient(app) as first_client:
         created = first_client.post(
             "/runs", json={"question": "Compare Q2 2025 with Q1 2025"}

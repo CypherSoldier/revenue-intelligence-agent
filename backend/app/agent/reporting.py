@@ -43,6 +43,19 @@ def assemble_report(
     if metric is None:
         raise ReportAssemblyError("The report metric is outside the catalog.")
 
+    if not evidence:
+        return RunReport(
+            answer=(
+                "No rows were returned for the requested period, so this run "
+                "cannot support a revenue conclusion."
+            ),
+            findings=[],
+            caveats=[
+                "The result set was empty; no revenue value can be inferred.",
+                "These descriptive results do not establish causal drivers.",
+            ],
+        )
+
     request = ModelRequest(
         system_instruction=_report_instruction(metric.name, metric.unit),
         messages=[ModelMessage(role="user", content=(

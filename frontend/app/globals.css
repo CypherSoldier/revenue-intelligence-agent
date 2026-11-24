@@ -27,6 +27,7 @@ button { font: inherit; }
 .question-input { flex: 1; width: 100%; min-width: 0; min-height: 52px; padding: 13px 8px 13px 0; border: 0; outline: 0; resize: vertical; background: transparent; color: #293244; font: inherit; font-size: 15px; line-height: 1.5; }
 .question-input::placeholder { color: #a0a8b6; }
 .question-input[aria-invalid="true"] { color: #a43b42; }
+.question-card:focus-within { outline:3px solid #4f46e566; outline-offset:2px; }
 .submit-button { min-height: 37px; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 7px; margin-left: 14px; padding: 0 13px; border: 0; border-radius: 7px; background: #4f46e5; color: #fff; font-size: 12px; font-weight: 650; cursor: pointer; }
 .submit-button:hover:not(:disabled) { background: #4338ca; }
 .submit-button:disabled { cursor: wait; opacity: .72; }
@@ -57,6 +58,8 @@ button { font: inherit; }
 .query-reference summary span:last-child { color:#929bab; }
 .query-reference code { display:block; overflow:auto; padding:10px; border-top:1px solid #edf0f4; color:#485367; font-size:10px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
 .query-reference-meta { padding:0 10px 8px; color:#929bab; font-size:9px; }
+.query-help { margin:8px 0 0; color:#697386; font-size:10px; line-height:1.5; }
+.query-help code { padding:1px 4px; border-radius:3px; background:#eef0f5; color:#465165; }
 .workspace-actions { display:flex; align-items:center; gap:9px; }
 .new-investigation-button { padding:9px 12px; border:1px solid #d9def8; border-radius:7px; background:#f7f8ff; color:#4f56bd; font-size:12px; font-weight:650; cursor:pointer; }
 .new-investigation-button:hover { background:#eef0ff; }
@@ -110,7 +113,7 @@ button { font: inherit; }
 .evidence-values dd { margin:0; color:#465165; font-size:11px; font-weight:650; }
 .evidence-meta { margin-top:5px; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-button:focus-visible,.query-reference summary:focus-visible { outline:3px solid #4f46e566; outline-offset:2px; }
+button:focus-visible,a:focus-visible,.query-reference summary:focus-visible { outline:3px solid #4f46e566; outline-offset:2px; }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:850px) {
   .run-summary { align-items:flex-start; flex-direction:column; }
@@ -129,6 +132,6 @@ button:focus-visible,.query-reference summary:focus-visible { outline:3px solid 
   .evidence-heading { flex-direction:column; gap:4px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .button-spinner,.status-spinner { animation-duration:2s; }
+  .button-spinner,.status-spinner { animation:none; }
 }
         

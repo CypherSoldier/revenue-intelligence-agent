@@ -13,6 +13,32 @@ from app.providers.errors import (
     provider_http_error,
 )
 
+_GENERATION_SCHEMA_LIMIT_KEYS = {
+    "maximum",
+    "maxItems",
+    "maxLength",
+    "minimum",
+    "minItems",
+    "minLength",
+}
+
+
+def _generation_json_schema(value):
+    """Remove size bounds that make Gemini's constrained decoder too complex.
+
+    The provider schema guides generation. Pydantic still enforces every original
+    bound on the returned object before the application uses it.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _generation_json_schema(item)
+            for key, item in value.items()
+            if key not in _GENERATION_SCHEMA_LIMIT_KEYS
+        }
+    if isinstance(value, list):
+        return [_generation_json_schema(item) for item in value]
+    return value
+
 
 class GeminiProvider:
     provider_name = "gemini"
@@ -26,7 +52,8 @@ class GeminiProvider:
             )
         self.model_name = settings.gemini_model
         self._client = genai.Client(
-            api_key=settings.gemini_api_key.get_secret_value()
+            api_key=settings.gemini_api_key.get_secret_value(),
+            http_options=types.HttpOptions(api_version="v1beta"),
         )
 
     def generate(self, request: ModelRequest) -> ModelResponse:
@@ -72,7 +99,9 @@ class GeminiProvider:
         }
         if request.response_schema is not None:
             config["response_mime_type"] = "application/json"
-            config["response_schema"] = request.response_schema
+            config["response_json_schema"] = _generation_json_schema(
+                request.response_schema
+            )
         if request.tools:
             config["tools"] = [
                 types.Tool(

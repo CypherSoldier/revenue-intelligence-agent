@@ -1,0 +1,33 @@
+flowchart LR
+    User[Analyst] --> UI[React + TypeScript investigation UI]
+    UI --> API[FastAPI API]
+    API --> AppDB[(Application metadata store)]
+    API --> Queue[Redis-backed job queue]
+    Queue --> Worker[Agent worker]
+    Worker --> Flow[Bounded workflow / state machine]
+    Flow <--> LLM[LLM with structured tool calls]
+    Flow --> Tools[Registered tool adapters]
+    Tools --> Policy[Policy and SQL validation]
+    Policy --> SQL[Read-only SQL executor]
+    SQL --> Warehouse[(Approved analytics database)]
+    Tools --> Metrics[Metric catalog and schema metadata]
+    SQL --> Results[Bounded query results]
+    Results --> Validate[Result validation]
+    Validate --> Flow
+    Flow --> Report[Evidence-backed report]
+    Report --> AppDB
+    AppDB --> UI
+    UI --> Approval[User reviews and confirms publish]
+    Approval --> SlackTool[Slack publisher]
+    SlackTool --> Slack[Configured Slack channel]
+    SlackTool --> AppDB
+
+    classDef client fill:#e7f0fa,stroke:#4776a8,color:#123;
+    classDef agent fill:#e2f1e8,stroke:#48835b,color:#123;
+    classDef guarded fill:#fff0d9,stroke:#ad7d1c,color:#222;
+    classDef data fill:#eee8f7,stroke:#7957a5,color:#123;
+
+    class User,UI,API,Approval client;
+    class Queue,Worker,Flow,LLM,Report agent;
+    class Tools,Policy,SQL,Validate,SlackTool guarded;
+    class AppDB,Warehouse,Metrics,Results,Slack data;

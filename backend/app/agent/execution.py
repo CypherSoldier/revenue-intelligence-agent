@@ -114,6 +114,14 @@ def execute_plan(
     tool_calls_used = 0
 
     for step in plan.steps:
+        comparison_guidance = (
+            "This is a comparison: return one labeled aggregate row for EACH approved "
+            "period in this single tool call, using separate SELECT branches joined "
+            "with UNION ALL. Bind the start and end boundary for each period. A query "
+            "covering only one period is invalid."
+            if len(plan.periods) == 2
+            else "Return an aggregate for the one approved period."
+        )
         messages = [
             ModelMessage(role="user", content=(
                 f"Original question: {question}\n"
@@ -123,7 +131,7 @@ def execute_plan(
                 f"Current step: {step.title}. {step.summary}\n"
                 "Call run_read_only_query exactly once for this step. Use positional ? "
                 "placeholders and provide all values in parameters. Query only the "
-                "approved metric, periods, and dimensions."
+                f"approved metric, periods, and dimensions. {comparison_guidance}"
             ))
         ]
         executed = False
